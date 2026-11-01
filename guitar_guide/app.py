@@ -430,6 +430,7 @@ class ProgressionsTab(Tab):
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
         self.items: list[theory.Progression] = []
+        self.rows: list = []
         self.current: theory.Progression | None = None
         self.chords: list[theory.Chord] = []
         self.voicings: list[guitar.Voicing] = []
@@ -442,7 +443,7 @@ class ProgressionsTab(Tab):
         left = ttk.Frame(self)
         left.grid(row=0, column=0, sticky="ns", padx=(0, 16))
         ttk.Label(left, text="Progressions", style="Head.TLabel").pack(anchor="w")
-        self.listbox = tk.Listbox(left, exportselection=False, width=34, height=15, bg=PANEL, fg=FG,
+        self.listbox = tk.Listbox(left, exportselection=False, width=38, height=22, bg=PANEL, fg=FG,
                                   selectbackground=ACCENT, selectforeground=DARK_TEXT, highlightthickness=0,
                                   borderwidth=0, activestyle="none", font=(FONT, 11))
         self.listbox.pack(anchor="w", pady=(2, 10))
@@ -497,20 +498,35 @@ class ProgressionsTab(Tab):
             self._mode = st.mode
             self.items = theory.progressions_for(st.mode)
             self.listbox.delete(0, "end")
+            self.rows = []  # a Progression, or a category name for a header row
+            category = None
             for p in self.items:
-                self.listbox.insert("end", p.name)
-            self.listbox.selection_set(0)
+                if p.category != category:
+                    category = p.category
+                    self.rows.append(category)
+                    self.listbox.insert("end", category.upper())
+                    self.listbox.itemconfig("end", foreground=BLUE, selectforeground=BLUE, selectbackground=PANEL)
+                self.rows.append(p)
+                self.listbox.insert("end", "   " + p.name)
             self.current = self.items[0]
+            self.listbox.selection_set(self.rows.index(self.current))
         self.stop()
         self._rebuild()
 
     def _picked(self, _event=None) -> None:
         sel = self.listbox.curselection()
-        if sel:
-            self.current = self.items[sel[0]]
-            self.error.config(text="")
-            self.stop()
-            self._rebuild()
+        if not sel:
+            return
+        row = self.rows[sel[0]]
+        if isinstance(row, str):  # a category header: keep the current selection
+            self.listbox.selection_clear(0, "end")
+            if self.current in self.rows:
+                self.listbox.selection_set(self.rows.index(self.current))
+            return
+        self.current = row
+        self.error.config(text="")
+        self.stop()
+        self._rebuild()
 
     def _apply_custom(self) -> None:
         tokens = [t for t in re.split(r"[\s,\-–]+", self.custom.get().strip()) if t]

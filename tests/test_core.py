@@ -96,6 +96,28 @@ class HarmonyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             theory.parse_numeral("Vfoo")
 
+    def test_alternative_and_heavy_progressions(self):
+        def resolve(name, tonic):
+            p = next(p for p in theory.PROGRESSIONS if p.name.startswith(name))
+            return names(theory.resolve_progression(p.numerals, tonic, p.mode))
+        self.assertEqual(resolve("Major III", "G"), ["G", "B", "C", "Cm"])
+        self.assertEqual(resolve("Ringing add9", "C"), ["Cadd9", "G", "Am7", "Fadd9"])
+        self.assertEqual(resolve("Power-chord riff", "A"), ["A5", "F5", "G5", "A5"])
+        self.assertEqual(resolve("Phrygian", "A"), ["A5", "Bb5", "A5", "G5"])
+        self.assertEqual(resolve("Tritone", "A"), ["A5", "Eb5", "A5", "G5"])
+        self.assertEqual(resolve("Hard rock", "E"), ["E5", "G5", "A5", "D5"])
+        self.assertEqual(resolve("Borrowed lift", "C"), ["C", "Eb", "F", "C"])
+
+    def test_progression_categories_are_grouped(self):
+        for mode in ("major", "minor"):
+            seen = []
+            for p in theory.progressions_for(mode):
+                if not seen or seen[-1] != p.category:
+                    seen.append(p.category)
+            self.assertEqual(len(seen), len(set(seen)), f"{mode} categories are not contiguous")
+            self.assertIn(theory.ALTERNATIVE, seen)
+            self.assertIn(theory.HEAVY, seen)
+
     def test_keys_containing(self):
         found = dict((k, r) for r, k in theory.keys_containing(7, "maj"))
         self.assertEqual(found["G major"], "I")

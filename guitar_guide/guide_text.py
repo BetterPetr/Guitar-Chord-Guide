@@ -58,7 +58,7 @@ GUIDE = [
            "the pentatonic around them. Click the neck to hear a note."),
     ("li", "•  Chord Library: any root, 14 chord types, all the voicings in neck order, plus the keys on the "
            "circle in which that chord is diatonic."),
-    ("li", "•  Progressions: classic progressions in any key, with diagrams, playback with a moving "
+    ("li", "•  Progressions: classic, alternative/indie and heavy power-chord progressions in any key, with diagrams, playback with a moving "
            "highlight, loop, and a suggestion of which pentatonic to solo with. Type your own with Roman "
            "numerals (upper case major, lower case minor, add 7, maj7 or °; ♭ before the numeral to flatten)."),
     ("li", "•  Chord voicings (top right) decides how high up the neck the diagrams sit."),

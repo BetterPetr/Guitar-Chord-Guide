@@ -297,7 +297,10 @@ class Progression:
     solo: str       # pentatonic that sits over it: "major_pent" | "minor_pent"
     blue: bool = False
     solo_tip: str = ""
+    category: str = "Classic"
 
+
+CLASSIC, ALTERNATIVE, HEAVY = "Classic", "Alternative / indie", "Heavy / power chords"
 
 PROGRESSIONS = (
     Progression("Pop four (I–V–vi–IV)", "major", ("I", "V", "vi", "IV"),
@@ -362,6 +365,78 @@ PROGRESSIONS = (
                 "The 12-bar form in a minor key.",
                 "minor_pent", blue=True,
                 solo_tip="Minor pentatonic plus the blue note. Here the pentatonic fits everywhere."),
+
+    # --- alternative / indie -------------------------------------------------
+    # Idioms common in alternative rock rather than transcriptions of particular songs.
+    Progression("Ringing add9 (Iadd9–V–vi7–IVadd9)", "major", ("Iadd9", "V", "vi7", "IVadd9"),
+                "The pop four chords dressed with add9 and minor 7th colours so the open strings "
+                "ring on. A staple of indie and alternative guitar.",
+                "major_pent", category=ALTERNATIVE,
+                solo_tip="The added 9th is already in the major pentatonic, so it fits all the way through."),
+    Progression("Sus2 shimmer (Isus2–IV–vi7–Vsus4)", "major", ("Isus2", "IV", "vi7", "Vsus4"),
+                "Suspended chords never quite settle, which gives a floating, wide-open sound. "
+                "Let the chords ring and pick the top strings.",
+                "major_pent", category=ALTERNATIVE),
+    Progression("Major III + minor iv (I–III–IV–iv)", "major", ("I", "III", "IV", "iv"),
+                "The bittersweet 'Creep' progression: a major chord on the 3rd degree, then the IV "
+                "turning minor. Both borrow notes from outside the key.",
+                "major_pent", category=ALTERNATIVE,
+                solo_tip="The III and iv contain notes outside the key's pentatonic, so aim for "
+                         "their chord tones when you land on them."),
+    Progression("Borrowed lift (I–♭III–IV–I)", "major", ("I", "bIII", "IV", "I"),
+                "The ♭III is borrowed from the parallel minor. It brightens straight into the IV for a "
+                "big, anthemic alt-rock lift.",
+                "minor_pent", blue=True, category=ALTERNATIVE,
+                solo_tip="Minor pentatonic with the blue note matches the borrowed ♭III."),
+    Progression("Borrowed climb (I–♭VII–♭VI–♭VII)", "major", ("I", "bVII", "bVI", "bVII"),
+                "Borrows ♭VI and ♭VII from the parallel minor for a widescreen, driving feel.",
+                "minor_pent", blue=True, category=ALTERNATIVE),
+    Progression("Alt-rock lift (i–VI–VII–i)", "minor", ("i", "VI", "VII", "i"),
+                "Rise from the minor home through the two major chords above it and fall back. "
+                "Works as a verse or a chorus.",
+                "minor_pent", category=ALTERNATIVE),
+    Progression("Ringing minor (i–VIadd9–IIIadd9–VII)", "minor", ("i", "VIadd9", "IIIadd9", "VII"),
+                "Minor key with open, ringing add9 colours: moody but not heavy. Strum it or arpeggiate it.",
+                "minor_pent", category=ALTERNATIVE),
+    Progression("Rising anthem (i–III–VII–VI)", "minor", ("i", "III", "VII", "VI"),
+                "The i–III–VII–VI loop is everywhere in modern rock: dark verse, big chorus.",
+                "minor_pent", category=ALTERNATIVE),
+    Progression("Minor to major V (i–iv–V–i)", "minor", ("i", "iv", "V", "i"),
+                "The V is major, borrowed from harmonic minor, so it pulls much harder back to i "
+                "than the natural-minor v would.",
+                "minor_pent", blue=True, category=ALTERNATIVE,
+                solo_tip="The major V has a note (the raised 7th) that the pentatonic lacks; "
+                         "target the chord's root and 3rd there."),
+    Progression("Dark cadence (i–VI–iv–V)", "minor", ("i", "VI", "iv", "V"),
+                "Falls from the home chord, then builds back up through the iv to the dominant.",
+                "minor_pent", category=ALTERNATIVE),
+
+    # --- heavy / power chords ------------------------------------------------
+    # Played with power chords (root and fifth, 5 chords) and palm muting.
+    Progression("Power-chord riff (i5–VI5–VII5–i5)", "minor", ("i5", "VI5", "VII5", "i5"),
+                "The core hard-rock and metal riff shape: root and fifth only, palm-muted on the "
+                "low strings.",
+                "minor_pent", blue=True, category=HEAVY,
+                solo_tip="Minor pentatonic with the blue note is the heavy-rock lead sound."),
+    Progression("Heavy anthem (i5–VI5–III5–VII5)", "minor", ("i5", "VI5", "III5", "VII5"),
+                "The epic minor loop played as power chords.",
+                "minor_pent", blue=True, category=HEAVY),
+    Progression("Phrygian riff (i5–♭II5–i5–♭VII5)", "minor", ("i5", "bII5", "i5", "VII5"),
+                "The ♭II a semitone above the root gives the dark, menacing Phrygian sound of "
+                "thrash and metal.",
+                "minor_pent", blue=True, category=HEAVY,
+                solo_tip="Minor pentatonic works, and the ♭II is a good note to bend or slide into."),
+    Progression("Tritone riff (i5–♭V5–i5–VII5)", "minor", ("i5", "bV5", "i5", "VII5"),
+                "The ♭V is a tritone from the root, the 'devil's interval' behind a lot of "
+                "doom and heavy metal.",
+                "minor_pent", blue=True, category=HEAVY,
+                solo_tip="The blue note is the ♭5, the same note as the ♭V chord's root."),
+    Progression("Punk power chords (I5–IV5–V5–IV5)", "major", ("I5", "IV5", "V5", "IV5"),
+                "Three-chord punk: fast downstrokes on power chords, no thirds to muddy things up.",
+                "minor_pent", blue=True, category=HEAVY),
+    Progression("Hard rock (I5–♭III5–IV5–♭VII5)", "major", ("I5", "bIII5", "IV5", "bVII5"),
+                "Power chords moving through borrowed ♭III and ♭VII for a classic hard-rock riff.",
+                "minor_pent", blue=True, category=HEAVY),
 )
 
 
