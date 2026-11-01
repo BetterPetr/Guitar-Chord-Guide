@@ -13,6 +13,17 @@ python -m guitar_guide
 or double-click `Guitar-Chord-Guide.pyw`. Needs Python 3.10+ with tkinter (included with the
 standard Windows installer).
 
+## Build an .exe
+
+```bash
+powershell -ExecutionPolicy Bypass -File build.ps1
+```
+
+This creates a private `.venv`, installs PyInstaller into it and writes a single-file,
+windowless `dist\Guitar-Chord-Guide.exe` (about 10 MB, no Python needed to run it). `dist/`,
+`build/` and `.venv/` are git-ignored. The exe isn't code-signed, so Windows SmartScreen or
+antivirus may warn on first run.
+
 ## What's in it
 
 Pick a key in the bar at the top and every tab follows it.
