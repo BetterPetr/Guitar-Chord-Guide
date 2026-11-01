@@ -119,7 +119,7 @@ class CircleTab(Tab):
             v = self.app.voicing_for(chord)
             d = ChordDiagram(self.diagrams, scale=self.app.scale * 0.92)
             d.show(chord.name, v.frets, chord.pc, subtitle=pretty(chord.roman),
-                   command=lambda v=v: self.app.play(v))
+                   command=lambda v=v: self.app.play(v), tuning=v.tuning)
             d.grid(row=i // 4, column=i % 4, padx=3, pady=3)
 
 
@@ -207,7 +207,7 @@ class FretboardTab(Tab):
         self.redraw()
 
     def _note_clicked(self, string: int, fret: int) -> None:
-        self.app.player.strum([guitar.OPEN_MIDI[string] + fret])
+        self.app.player.strum([self.app.tuning.open[string] + fret])
 
     def _pick_shape(self, letter: str, voicing) -> None:
         self.shape_var.set(letter)
@@ -216,7 +216,8 @@ class FretboardTab(Tab):
     def redraw(self) -> None:
         if not self.chords:
             return
-        st, n_frets = self.app.key, self.canvas.nfrets
+        st, n_frets, tuning = self.app.key, self.canvas.nfrets, self.app.tuning
+        self.canvas.tuning = tuning
         kind = self.scale_var.get()
         scale_mode = "minor" if kind == "minor_pent" else "major"
         scale_tonic = theory.key_name(st.pc, scale_mode)
@@ -234,14 +235,14 @@ class FretboardTab(Tab):
                 return pretty(INTERVALS12[(pc - st.pc) % 12])
             return pretty(by_pc[pc].name if pc in by_pc else theory.pc_name(pc, flats))
 
-        boxes = guitar.pentatonic_boxes(st.pc, kind, n_frets)
+        boxes = guitar.pentatonic_boxes(st.pc, kind, n_frets, tuning)
         box_choice = self.box_var.get()
         box_n = None if box_choice == "All" else int(box_choice)
         caged_on = self.caged_var.get()
         chord = self.chords[min(self.chord_combo.current(), len(self.chords) - 1)]
         shapes = []
         if caged_on:
-            shapes = [v for v in guitar.caged_instances(chord.pc, chord.ctype == "min", n_frets)
+            shapes = [v for v in guitar.caged_instances(chord.pc, chord.ctype == "min", n_frets, tuning)
                       if self.shape_var.get() in ("All", v.form.caged)]
 
         def with_blue(instance):
@@ -249,7 +250,7 @@ class FretboardTab(Tab):
             frets = [f for _, f in instance]
             extra = set()
             if blue_pc is not None:
-                extra = {(s, f) for s, f in guitar.scale_positions({blue_pc}, n_frets)
+                extra = {(s, f) for s, f in guitar.scale_positions({blue_pc}, n_frets, tuning)
                          if min(frets) - 1 <= f <= max(frets)}
             return set(instance) | extra
 
@@ -273,8 +274,8 @@ class FretboardTab(Tab):
 
         dots: dict[tuple, Dot] = {}
         if self.pent_var.get():
-            for s, f in guitar.scale_positions(set(by_pc), n_frets):
-                pc = guitar.fret_pc(s, f)
+            for s, f in guitar.scale_positions(set(by_pc), n_frets, tuning):
+                pc = guitar.fret_pc(s, f, tuning)
                 if focus is not None and (s, f) not in focus:
                     dots[(s, f)] = Dot(s, f, "#3a3f4b", label(pc), MUTED, size=0.72)
                 elif pc == st.pc:
@@ -290,18 +291,18 @@ class FretboardTab(Tab):
             frets = [f for _, f in v.played]
             outlines.append(Outline((min(strings), max(strings)), (min(frets), max(frets)), color, dash=False))
             for s, f in v.played:
-                pc = guitar.fret_pc(s, f)
+                pc = guitar.fret_pc(s, f, tuning)
                 dots[(s, f)] = Dot(s, f, color, label(pc), ring=(pc == chord.pc), size=1.1)
         self.canvas.show(dots.values(), outlines)
         self._update_info(kind, scale_tonic, notes, chord, shapes, box_n, boxes, best_box_numbers, by_pc)
 
         if caged_on:
             self.strip.pack(anchor="w", pady=(0, 2))
-            for d, v in zip(self.strip_diagrams, guitar.caged_voicings(chord.pc, chord.ctype == "min")):
+            for d, v in zip(self.strip_diagrams, guitar.caged_voicings(chord.pc, chord.ctype == "min", tuning)):
                 letter = v.form.caged
                 d.show(f"{letter} shape", v.frets, chord.pc,
                        subtitle="open" if v.position == 0 else f"fret {v.position}",
-                       title_color=CAGED_COLORS[letter],
+                       title_color=CAGED_COLORS[letter], tuning=tuning,
                        command=lambda l=letter, v=v: self._pick_shape(l, v))
         else:
             self.strip.pack_forget()
@@ -318,7 +319,7 @@ class FretboardTab(Tab):
                 frets = [f for _, f in inst]
                 spans.append(f"frets {min(frets)}–{max(frets)}")
             lines.append(f"Box {box_n}: " + " and ".join(spans) + ". Boxes are numbered from the minor-pentatonic "
-                         "root on the low E string (Box 1); the major pentatonic uses the same shapes.")
+                         "root on the lowest string (Box 1); the major pentatonic uses the same shapes.")
         if self.caged_var.get():
             tones = sum(1 for pc in chord.pcs if pc in by_pc)
             fit = "all" if tones == len(chord.pcs) else f"{tones} of {len(chord.pcs)}"
@@ -328,6 +329,12 @@ class FretboardTab(Tab):
                 where = "open position" if v.position == 0 else f"lowest fret {v.position}"
                 box = f"; it sits inside pentatonic Box {best_numbers[0]}" if best_numbers else ""
                 lines.append(f"{v.form.caged} shape ({where}){box}. Dashed box = the pentatonic notes around it.")
+        tuning = self.app.tuning
+        if tuning != guitar.STANDARD:
+            lines.append(f"{pretty(tuning.name)} ({pretty(tuning.description)}): the pentatonic boxes and CAGED shapes are "
+                         f"the standard-tuning shapes sounding {abs(tuning.shift) or 'no'} semitone"
+                         f"{'' if abs(tuning.shift) == 1 else 's'} lower, with the lowest string re-fretted two frets "
+                         "higher. Box 1 can't sit at the nut here, so it appears an octave up.")
         self.info.config(text="\n".join(lines))
 
 
@@ -407,11 +414,11 @@ class ChordsTab(Tab):
         formula = pretty("  –  ".join(ct.labels))
         self.facts.config(text=f"Formula:  {formula}\nNotes:  {notes_text(chord.notes)}")
         clear(self.gallery)
-        for i, v in enumerate(guitar.voicings(chord.pc, ctype)):
+        for i, v in enumerate(guitar.voicings(chord.pc, ctype, self.app.tuning)):
             d = ChordDiagram(self.gallery, scale=self.app.scale)
             d.show(chord.name, v.frets, chord.pc,
-                   subtitle=f"{v.form.name} · " + ("open" if v.position == 0 else f"fret {v.position}"),
-                   command=lambda v=v: self.app.play(v))
+                   subtitle=f"{v.label} · " + ("open" if v.position == 0 else f"fret {v.position}"),
+                   command=lambda v=v: self.app.play(v), tuning=v.tuning)
             d.grid(row=0, column=i, padx=4, pady=2)
         found = theory.keys_containing(chord.pc, ctype)
         if found:
@@ -463,6 +470,11 @@ class ProgressionsTab(Tab):
         self.title.pack(anchor="w")
         self.sub = ttk.Label(right, style="Body.TLabel", justify="left", wraplength=int(860 * app.scale))
         self.sub.pack(anchor="w", pady=(2, 8))
+        self.tuning_hint = ttk.Frame(right)
+        self.tuning_label = ttk.Label(self.tuning_hint, style="Body.TLabel")
+        self.tuning_label.pack(side="left")
+        ttk.Button(self.tuning_hint, text="Switch tuning",
+                   command=lambda: self.app.tuning_var.set(self.current.tuning)).pack(side="left", padx=10)
 
         controls = ttk.Frame(right)
         controls.pack(anchor="w", pady=(0, 8))
@@ -557,11 +569,19 @@ class ProgressionsTab(Tab):
         self.title.config(text=p.name)
         numerals = pretty(" – ".join(p.numerals))
         self.sub.config(text=f"{numerals}   in   {pretty(st.tonic)} {st.mode}\n{p.description}")
+        if p.tuning and p.tuning != self.app.tuning.name:
+            want = guitar.TUNING_BY_NAME[p.tuning]
+            self.tuning_label.config(text=f"Written for {pretty(want.name)} ({pretty(want.description)}); "
+                                          f"the diagrams are showing {pretty(self.app.tuning.name)}.")
+            self.tuning_hint.pack(anchor="w", pady=(0, 8), after=self.sub)
+        else:
+            self.tuning_hint.pack_forget()
         clear(self.grid_frame)
         self.diagrams = []
         for i, (chord, v) in enumerate(zip(self.chords, self.voicings)):
             d = ChordDiagram(self.grid_frame, scale=self.app.scale * 0.95)
-            d.show(chord.name, v.frets, chord.pc, subtitle=pretty(chord.roman), command=lambda v=v: self.app.play(v))
+            d.show(chord.name, v.frets, chord.pc, subtitle=pretty(chord.roman),
+                   command=lambda v=v: self.app.play(v), tuning=v.tuning)
             d.grid(row=i // 4, column=i % 4, padx=4, pady=4)
             self.diagrams.append(d)
         scale_mode = "minor" if p.solo == "minor_pent" else "major"
@@ -680,6 +700,7 @@ class App(tk.Tk):
         self.player = Player()
         self._queue: queue.Queue = queue.Queue()
         self.area_var = tk.StringVar(value=next(iter(guitar.AREAS)))
+        self.tuning_var = tk.StringVar(value=guitar.STANDARD.name)
 
         self._build_header()
         self.notebook = ttk.Notebook(self)
@@ -691,6 +712,7 @@ class App(tk.Tk):
             self.notebook.add(tab, text=title)
         self.key.subscribe(self._key_changed)
         self.area_var.trace_add("write", lambda *a: self._key_changed())
+        self.tuning_var.trace_add("write", lambda *a: self._tuning_changed())
         self._key_changed()
         self.after(60, self._poll)
 
@@ -740,12 +762,25 @@ class App(tk.Tk):
         self.summary.pack(side="left", padx=14)
         ttk.Label(bar, text="Chord voicings").pack(side="right", padx=(0, 0))
         area = ttk.Combobox(bar, textvariable=self.area_var, width=12, state="readonly", values=list(guitar.AREAS))
-        area.pack(side="right", padx=(0, 8))
+        area.pack(side="right", padx=(0, 18))
+        self.tuning_combo = ttk.Combobox(bar, width=9, state="readonly",
+                                         values=[pretty(t.name) for t in guitar.TUNINGS])
+        self.tuning_combo.pack(side="right", padx=(0, 8))
+        self.tuning_combo.bind("<<ComboboxSelected>>",
+                               lambda e: self.tuning_var.set(guitar.TUNINGS[self.tuning_combo.current()].name))
+        self.tuning_note = ttk.Label(bar, style="Muted.TLabel")
+        self.tuning_note.pack(side="right", padx=(0, 6))
+        ttk.Label(bar, text="Tuning").pack(side="right", padx=(0, 6))
+        self._tuning_changed(refresh=False)
 
     # -- shared helpers for the tabs --
 
+    @property
+    def tuning(self) -> guitar.Tuning:
+        return guitar.TUNING_BY_NAME[self.tuning_var.get()]
+
     def voicing_for(self, chord: theory.Chord) -> guitar.Voicing:
-        return guitar.pick_voicing(chord.pc, chord.ctype, guitar.AREAS[self.area_var.get()])
+        return guitar.pick_voicing(chord.pc, chord.ctype, guitar.AREAS[self.area_var.get()], self.tuning)
 
     def play(self, voicing: guitar.Voicing) -> None:
         self.player.strum(voicing.midis)
@@ -773,6 +808,13 @@ class App(tk.Tk):
         except queue.Empty:
             pass
         self.after(60, self._poll)
+
+    def _tuning_changed(self, refresh: bool = True) -> None:
+        t = self.tuning
+        self.tuning_combo.current(guitar.TUNINGS.index(t))
+        self.tuning_note.config(text="" if t == guitar.STANDARD else pretty(t.description))
+        if refresh:
+            self._key_changed()
 
     def _key_changed(self) -> None:
         st = self.key

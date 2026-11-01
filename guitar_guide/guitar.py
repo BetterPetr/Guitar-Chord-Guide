@@ -1,15 +1,22 @@
-"""Guitar-specific geometry: standard tuning, chord forms, CAGED shapes, pentatonic boxes.
+"""Guitar-specific geometry: tunings, chord forms, CAGED shapes, pentatonic boxes.
 
-Strings are indexed 0..5 from the low E to the high e; frets are ints with 0 for
+Strings are indexed 0..5 from the lowest to the highest; frets are ints with 0 for
 an open string and None for a muted one.  No GUI imports.
+
+Every shape in this module is written for standard tuning.  Other tunings are
+handled by a "reference tuning": the same shapes sounding `shift` semitones lower.
+A drop tuning also lowers its lowest string a further whole step, so a note on
+that string needs a fret two higher than in the reference tuning; the dropped
+string can also reach two semitones below the reference range, which is what
+makes one-finger power chords possible.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .theory import LETTER_PC
+from .theory import LETTER_PC, SHARP_NAMES
 
-OPEN_MIDI = (40, 45, 50, 55, 59, 64)  # E2 A2 D3 G3 B3 E4
+STANDARD_OPEN = (40, 45, 50, 55, 59, 64)  # E2 A2 D3 G3 B3 E4
 STRING_LABELS = ("E", "A", "D", "G", "B", "e")
 X = None  # muted string
 
@@ -17,8 +24,44 @@ CAGED_ORDER = "CAGED"
 PENT_BOXES = 5
 
 
-def fret_pc(string: int, fret: int) -> int:
-    return (OPEN_MIDI[string] + fret) % 12
+@dataclass(frozen=True)
+class Tuning:
+    name: str
+    shift: int = 0      # semitones every string sits below standard (ignoring the drop)
+    drop: bool = False  # lowest string a further whole step down
+
+    @property
+    def open(self) -> tuple:
+        pitches = [m + self.shift for m in STANDARD_OPEN]
+        if self.drop:
+            pitches[0] -= 2
+        return tuple(pitches)
+
+    @property
+    def low_offset(self) -> int:
+        """Frets to add on the lowest string to sound the same note as in the reference tuning."""
+        return 2 if self.drop else 0
+
+    @property
+    def labels(self) -> tuple:
+        if self.shift == 0 and not self.drop:
+            return STRING_LABELS
+        return tuple(SHARP_NAMES[m % 12] for m in self.open)
+
+    @property
+    def description(self) -> str:
+        return " ".join(self.labels)
+
+
+STANDARD = Tuning("Standard")
+TUNINGS = (STANDARD, Tuning("Drop D", 0, True), Tuning("Drop C#", -1, True), Tuning("Drop C", -2, True))
+TUNING_BY_NAME = {t.name: t for t in TUNINGS}
+
+OPEN_MIDI = STANDARD.open
+
+
+def fret_pc(string: int, fret: int, tuning: Tuning = STANDARD) -> int:
+    return (tuning.open[string] + fret) % 12
 
 
 def midi_freq(midi: float) -> float:
@@ -87,6 +130,7 @@ class Voicing:
     form: Form
     root_pc: int
     frets: tuple
+    tuning: Tuning = STANDARD
 
     @property
     def played(self) -> list[tuple[int, int]]:
@@ -99,42 +143,67 @@ class Voicing:
 
     @property
     def midis(self) -> list[int]:
-        return [OPEN_MIDI[s] + f for s, f in self.played]
+        return [self.tuning.open[s] + f for s, f in self.played]
 
     @property
     def label(self) -> str:
+        f = self.frets
+        if self.tuning.drop and self.form.ctype == "5" and f[0] is not None and f[0] == f[1] == f[2]:
+            return "one-finger"
         return self.form.name
 
     def up_octave(self) -> "Voicing":
         return Voicing(self.form, self.root_pc,
-                       tuple(None if f is None else f + 12 for f in self.frets))
+                       tuple(None if f is None else f + 12 for f in self.frets), self.tuning)
 
 
-def transpose(form: Form, root_pc: int) -> Voicing:
-    offset = (root_pc - form.root_pc) % 12
-    frets = [None if f is None else f + offset for f in form.frets]
-    if min(f for f in frets if f is not None) >= 12:
-        frets = [None if f is None else f - 12 for f in frets]
-    return Voicing(form, root_pc, tuple(frets))
+def transpositions(form: Form, root_pc: int, tuning: Tuning = STANDARD) -> list[Voicing]:
+    """The playable positions of a form for a chord root, lowest first.
 
-
-def voicings(root_pc: int, ctype: str) -> list[Voicing]:
-    """Every known voicing of a chord, ordered from the nut up the neck."""
-    found = [transpose(f, root_pc) for f in FORMS if f.ctype == ctype]
+    Usually one.  A drop tuning can offer a second, lower one because its dropped
+    string reaches below the reference range (the open C5 of Drop C, for instance).
+    """
+    std_root = (root_pc - tuning.shift) % 12
+    base = (std_root - form.root_pc) % 12
+    found = []
+    for offset in (base - 12, base):
+        frets = [None if f is None else f + offset for f in form.frets]
+        if frets[0] is not None:
+            frets[0] += tuning.low_offset
+        played = [f for f in frets if f is not None]
+        if min(played) >= 0 and min(played) < 12:
+            found.append(Voicing(form, root_pc, tuple(frets), tuning))
+    if not found:  # every fret above the 12th: keep the form rather than lose it
+        frets = [None if f is None else f + base + (tuning.low_offset if i == 0 else 0)
+                 for i, f in enumerate(form.frets)]
+        found.append(Voicing(form, root_pc, tuple(frets), tuning))
     return sorted(found, key=lambda v: v.position)
 
 
-def caged_voicings(root_pc: int, minor: bool = False) -> list[Voicing]:
+def voicings(root_pc: int, ctype: str, tuning: Tuning = STANDARD) -> list[Voicing]:
+    """Every known voicing of a chord, ordered from the nut up the neck."""
+    found, seen = [], set()
+    for form in FORMS:
+        if form.ctype != ctype:
+            continue
+        for v in transpositions(form, root_pc, tuning):
+            if v.frets not in seen:
+                seen.add(v.frets)
+                found.append(v)
+    return sorted(found, key=lambda v: v.position)
+
+
+def caged_voicings(root_pc: int, minor: bool = False, tuning: Tuning = STANDARD) -> list[Voicing]:
     """The five CAGED shapes for a triad, ordered up the neck."""
     ctype = "min" if minor else "maj"
-    found = [transpose(f, root_pc) for f in FORMS if f.caged and f.ctype == ctype]
+    found = [transpositions(f, root_pc, tuning)[0] for f in FORMS if f.caged and f.ctype == ctype]
     return sorted(found, key=lambda v: v.position)
 
 
-def caged_instances(root_pc: int, minor: bool, nfrets: int) -> list[Voicing]:
+def caged_instances(root_pc: int, minor: bool, nfrets: int, tuning: Tuning = STANDARD) -> list[Voicing]:
     """CAGED shapes plus their copies an octave higher, if they fit on the neck."""
     out = []
-    for v in caged_voicings(root_pc, minor):
+    for v in caged_voicings(root_pc, minor, tuning):
         out.append(v)
         high = v.up_octave()
         if max(f for _, f in high.played) <= nfrets:
@@ -146,8 +215,10 @@ def caged_instances(root_pc: int, minor: bool, nfrets: int) -> list[Voicing]:
 AREAS = {"Open / low": 0.0, "Frets 3–5": 4.0, "Frets 6–8": 7.0, "Frets 9–12": 10.0}
 
 
-def pick_voicing(root_pc: int, ctype: str, target: float) -> Voicing:
-    cands = voicings(root_pc, ctype)
+def pick_voicing(root_pc: int, ctype: str, target: float, tuning: Tuning = STANDARD) -> Voicing:
+    cands = voicings(root_pc, ctype, tuning)
+    if tuning.drop and ctype == "5":  # the whole point of a drop tuning: one finger, three strings
+        cands = [v for v in cands if v.label == "one-finger"] or cands
     cands += [v.up_octave() for v in cands if max(f for _, f in v.played) + 12 <= 15]
 
     def cost(v: Voicing) -> float:
@@ -159,19 +230,24 @@ def pick_voicing(root_pc: int, ctype: str, target: float) -> Voicing:
 
 # --- pentatonic boxes ----------------------------------------------------
 
-def pentatonic_boxes(root_pc: int, kind: str, nfrets: int) -> dict[int, list[tuple]]:
+def pentatonic_boxes(root_pc: int, kind: str, nfrets: int,
+                     tuning: Tuning = STANDARD) -> dict[int, list[tuple]]:
     """The five pentatonic box positions for a key.
 
     Returns {box_number: [instance, ...]} where an instance is a tuple of
     (string, fret) pairs, two per string.  Boxes are numbered the usual way from
-    the minor pentatonic: box 1 starts on the minor-pentatonic root on the low E
+    the minor pentatonic: box 1 starts on the minor-pentatonic root on the lowest
     string.  A major pentatonic uses the same five shapes, numbered from its
     relative minor root (3 semitones down), so both scales share one set of boxes.
+
+    In a drop tuning the shapes are worked out in the reference tuning and the
+    lowest string is then re-fretted, so its two notes sit two frets higher.
     """
     minor_root = root_pc if kind == "minor_pent" else (root_pc + 9) % 12
     pcs = {(minor_root + s) % 12 for s in (0, 3, 5, 7, 10)}
-    seq = [m for m in range(28, 120) if m % 12 in pcs]
-    base = next(i for i, m in enumerate(seq) if m >= OPEN_MIDI[0] and m % 12 == minor_root)
+    ref = [m + tuning.shift for m in STANDARD_OPEN]
+    seq = [m for m in range(16, 120) if m % 12 in pcs]
+    base = next(i for i, m in enumerate(seq) if m >= ref[0] and m % 12 == minor_root)
     boxes: dict[int, list[tuple]] = {}
     for n in range(PENT_BOXES):
         instances = []
@@ -179,7 +255,8 @@ def pentatonic_boxes(root_pc: int, kind: str, nfrets: int) -> dict[int, list[tup
             k0 = base + n + shift
             if k0 < 0 or k0 + 11 >= len(seq):
                 continue
-            inst = tuple((s, seq[k0 + 2 * s + t] - OPEN_MIDI[s]) for s in range(6) for t in (0, 1))
+            inst = tuple((s, seq[k0 + 2 * s + t] - ref[s] + (tuning.low_offset if s == 0 else 0))
+                         for s in range(6) for t in (0, 1))
             if all(0 <= f <= nfrets for _, f in inst):
                 instances.append(inst)
         boxes[n + 1] = instances
@@ -200,5 +277,5 @@ def best_box(voicing: Voicing, boxes: dict[int, list[tuple]]):
     return best
 
 
-def scale_positions(pcs, nfrets: int) -> list[tuple[int, int]]:
-    return [(s, f) for s in range(6) for f in range(nfrets + 1) if fret_pc(s, f) in pcs]
+def scale_positions(pcs, nfrets: int, tuning: Tuning = STANDARD) -> list[tuple[int, int]]:
+    return [(s, f) for s in range(6) for f in range(nfrets + 1) if fret_pc(s, f, tuning) in pcs]

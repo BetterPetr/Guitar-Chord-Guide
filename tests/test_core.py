@@ -128,17 +128,20 @@ class HarmonyTests(unittest.TestCase):
 
 class FormTests(unittest.TestCase):
     def test_every_form_plays_exactly_its_chord_tones(self):
-        for form in guitar.FORMS:
-            for root_pc in range(12):
-                v = guitar.transpose(form, root_pc)
-                played = {guitar.fret_pc(s, f) for s, f in v.played}
-                steps = theory.CHORD_TYPES[form.ctype].steps
-                expected = {(root_pc + s) % 12 for s in steps}
-                fifth = {(root_pc + 7) % 12}
-                # guitar voicings may legitimately drop the 5th (e.g. the classic C7), nothing else
-                self.assertTrue(played == expected or (len(steps) > 3 and played == expected - fifth),
-                                f"{form.name} {form.ctype} root {root_pc}: {played} vs {expected}")
-                self.assertTrue(all(0 <= f <= 15 for _, f in v.played), (form, root_pc, v.frets))
+        for tuning in guitar.TUNINGS:
+            for form in guitar.FORMS:
+                for root_pc in range(12):
+                    steps = theory.CHORD_TYPES[form.ctype].steps
+                    expected = {(root_pc + s) % 12 for s in steps}
+                    fifth = {(root_pc + 7) % 12}
+                    for v in guitar.transpositions(form, root_pc, tuning):
+                        played = {guitar.fret_pc(s, f, tuning) for s, f in v.played}
+                        # guitar voicings may legitimately drop the 5th (e.g. the classic C7), nothing else
+                        self.assertTrue(played == expected or (len(steps) > 3 and played == expected - fifth),
+                                        f"{tuning.name} {form.name} {form.ctype} root {root_pc}: {played} vs {expected}")
+                        self.assertTrue(all(0 <= f <= 17 for _, f in v.played), (form, root_pc, v.frets))
+                        self.assertEqual(sorted(v.midis), sorted(v.midis))
+                        self.assertTrue(all(m % 12 in expected for m in v.midis))
 
     def test_form_root_is_actually_in_form(self):
         for form in guitar.FORMS:
@@ -162,6 +165,88 @@ class FormTests(unittest.TestCase):
     def test_pick_voicing_prefers_open(self):
         self.assertEqual(guitar.pick_voicing(0, "maj", 0.0).frets, (None, 3, 2, 0, 1, 0))
         self.assertEqual(guitar.pick_voicing(5, "maj", 0.0).position, 1)  # F barre
+
+
+class TuningTests(unittest.TestCase):
+    def test_open_strings(self):
+        by_name = guitar.TUNING_BY_NAME
+        self.assertEqual(by_name["Standard"].open, (40, 45, 50, 55, 59, 64))
+        self.assertEqual(by_name["Drop D"].open, (38, 45, 50, 55, 59, 64))
+        self.assertEqual(by_name["Drop C"].open, (36, 43, 48, 53, 57, 62))
+        self.assertEqual(by_name["Drop C"].description, "C G C F A D")
+        self.assertEqual(by_name["Drop C#"].description, "C# G# C# F# A# D#")
+
+    def test_one_finger_power_chords(self):
+        drop_c = guitar.TUNING_BY_NAME["Drop C"]
+        c5 = guitar.voicings(0, "5", drop_c)[0]
+        self.assertEqual(c5.frets, (0, 0, 0, None, None, None))
+        self.assertEqual(c5.label, "one-finger")
+        self.assertEqual(c5.midis, [36, 43, 48])
+        g5 = [v for v in guitar.voicings(7, "5", drop_c) if v.label == "one-finger"][0]
+        self.assertEqual(g5.frets[:3], (7, 7, 7))
+        eb5 = guitar.voicings(3, "5", drop_c)[0]
+        self.assertEqual(eb5.frets[:3], (3, 3, 3))
+        d5 = guitar.voicings(2, "5", guitar.TUNING_BY_NAME["Drop D"])[0]
+        self.assertEqual(d5.frets[:3], (0, 0, 0))
+
+    def test_progression_tunings_exist_and_resolve_to_one_finger_chords(self):
+        drop_progs = [p for p in theory.PROGRESSIONS if p.tuning]
+        self.assertTrue(drop_progs)
+        for p in drop_progs:
+            self.assertIn(p.tuning, guitar.TUNING_BY_NAME)
+        # Power descent in C minor in Drop C: open, 10th, 8th, 7th frets
+        p = next(p for p in theory.PROGRESSIONS if p.name.startswith("Power descent"))
+        drop_c = guitar.TUNING_BY_NAME["Drop C"]
+        chords = theory.resolve_progression(p.numerals, "C", "minor")
+        frets = [guitar.pick_voicing(c.pc, c.ctype, 0.0, drop_c).frets[0] for c in chords]
+        self.assertEqual(frets, [0, 10, 8, 7])
+
+    def test_standard_tuning_unchanged(self):
+        std = guitar.voicings(0, "maj")
+        self.assertEqual(std[0].frets, (None, 3, 2, 0, 1, 0))
+        self.assertEqual(guitar.voicings(4, "5")[0].frets, (0, 2, 2, None, None, None))
+
+    def test_chords_sound_the_right_notes_in_drop_c(self):
+        drop_c = guitar.TUNING_BY_NAME["Drop C"]
+        for ctype in theory.CHORD_TYPES:
+            vs = guitar.voicings(0, ctype, drop_c)
+            self.assertTrue(vs, ctype)
+            pcs = {(0 + s) % 12 for s in theory.CHORD_TYPES[ctype].steps}
+            for v in vs:
+                self.assertTrue({m % 12 for m in v.midis} <= pcs)
+                self.assertIn(0, {m % 12 for m in v.midis})
+
+    def test_boxes_in_drop_tuning(self):
+        for tuning in guitar.TUNINGS:
+            for root in range(12):
+                for kind in ("minor_pent", "major_pent"):
+                    pcs = {(root + s) % 12 for s in theory.SCALES[kind].steps}
+                    boxes = guitar.pentatonic_boxes(root, kind, 17, tuning)
+                    self.assertTrue(all(boxes[n] for n in range(1, 6)), (tuning.name, root, kind))
+                    for insts in boxes.values():
+                        for inst in insts:
+                            self.assertTrue(all(guitar.fret_pc(s, f, tuning) in pcs for s, f in inst))
+                            self.assertTrue(all(0 <= f <= 17 for _, f in inst))
+                            self.assertEqual({s for s, _ in inst}, set(range(6)))
+
+    def test_drop_c_has_a_nut_position_box(self):
+        # C minor pentatonic in Drop C. Box 1 can't sit at the nut with two notes per string
+        # (the dropped string reaches below the next string's range) but Box 2 does.
+        drop_c = guitar.TUNING_BY_NAME["Drop C"]
+        boxes = guitar.pentatonic_boxes(0, "minor_pent", 17, drop_c)
+        low = min(boxes[2], key=lambda inst: min(f for _, f in inst))
+        self.assertEqual(low[:2], ((0, 3), (0, 5)))   # E-flat and F on the low string
+        self.assertEqual(low[2:4], ((1, 0), (1, 3)))  # open G and B-flat on the next
+        self.assertEqual(min(f for _, f in low), 0)
+        self.assertGreater(min(f for _, f in boxes[1][0]), 8)
+
+    def test_drop_tuning_matches_standard_above_the_dropped_string(self):
+        std = guitar.pentatonic_boxes(9, "minor_pent", 17)
+        drop_d = guitar.pentatonic_boxes(9, "minor_pent", 17, guitar.TUNING_BY_NAME["Drop D"])
+        for n in range(1, 6):
+            std_upper = {tuple(p for p in inst if p[0] > 0) for inst in std[n]}
+            drop_upper = {tuple(p for p in inst if p[0] > 0) for inst in drop_d[n]}
+            self.assertTrue(std_upper & drop_upper)
 
 
 class PentatonicBoxTests(unittest.TestCase):

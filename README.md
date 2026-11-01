@@ -22,8 +22,14 @@ Pick a key in the bar at the top and every tab follows it.
 | **Circle of Fifths** | Clickable wheel of major keys (outer) and relative minors (inner). Shows the key signature, scale, pentatonic and the key's diatonic chords (triads or 7ths) as chord diagrams. The six chords of the key are highlighted with their Roman numerals. |
 | **Fretboard** | 17-fret neck. Show the major or minor pentatonic, isolate any of the five boxes, add the blue note, label by note name or interval. Turn on **CAGED shapes** to see the five shapes for any chord in the key, with the pentatonic box that surrounds each shape outlined. |
 | **Chord Library** | Any root and 14 chord types (triads, 6ths, 7ths, 9ths, sus, dim, aug, power chords), every voicing in neck order, and the keys on the circle where the chord is diatonic. |
-| **Progressions** | 31 progressions in three groups, resolved into any key: **Classic** (pop, 50s, blues, jazz ii-V-I, Andalusian...), **Alternative / indie** (add9 and sus2 colours, borrowed chords, the major-III "Creep" move) and **Heavy / power chords** (power-chord riffs, Phrygian and tritone riffs, punk and hard rock). The alternative and heavy ones are common idioms, not transcriptions of particular songs. You can also type your own as Roman numerals. Play with a moving highlight, loop, and a suggestion of which pentatonic to solo with. |
+| **Progressions** | 39 progressions in four groups, resolved into any key: **Classic** (pop, 50s, blues, jazz ii-V-I, Andalusian...), **Alternative / indie** (add9 and sus2 colours, borrowed chords, the major-III "Creep" move), **Heavy / power chords** (power-chord riffs, Phrygian and tritone riffs, punk and hard rock) and **Drop tunings** (pedal chugs, gallops, chromatic one-finger climbs, written for Drop C and Drop D). The alternative, heavy and drop ones are common idioms, not transcriptions of particular songs. You can also type your own as Roman numerals. Play with a moving highlight, loop, and a suggestion of which pentatonic to solo with. |
 | **Guide** | Short written reference for the three systems and practice ideas. |
+
+**Tunings:** the bar at the top also has a tuning menu: Standard, Drop D, Drop C♯ and Drop C. Chord
+diagrams, voicings, the fretboard and playback all follow it, and a drop tuning gets one-finger power
+chords. The CAGED shapes and pentatonic boxes are the standard-tuning shapes sounding lower, with the
+dropped string re-fretted two frets higher. In a drop tuning Box 1 can't sit at the nut with two notes
+per string, so it appears an octave up and Box 2 is the nut-position box.
 
 Click any chord diagram to hear it strummed; click the fretboard to hear a note.
 "Chord voicings" (top right) chooses how high up the neck the diagrams sit.

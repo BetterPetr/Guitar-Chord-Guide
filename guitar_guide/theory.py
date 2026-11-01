@@ -298,9 +298,11 @@ class Progression:
     blue: bool = False
     solo_tip: str = ""
     category: str = "Classic"
+    tuning: str = ""  # tuning it is written for ("" = any); see guitar.TUNINGS
 
 
 CLASSIC, ALTERNATIVE, HEAVY = "Classic", "Alternative / indie", "Heavy / power chords"
+DROP = "Drop tunings"
 
 PROGRESSIONS = (
     Progression("Pop four (I–V–vi–IV)", "major", ("I", "V", "vi", "IV"),
@@ -437,6 +439,49 @@ PROGRESSIONS = (
     Progression("Hard rock (I5–♭III5–IV5–♭VII5)", "major", ("I5", "bIII5", "IV5", "bVII5"),
                 "Power chords moving through borrowed ♭III and ♭VII for a classic hard-rock riff.",
                 "minor_pent", blue=True, category=HEAVY),
+
+    # --- drop tunings ----------------------------------------------------------
+    # In a drop tuning the lowest string is a fifth below the next, so the three lowest
+    # strings give root-fifth-octave and one finger across them makes a power chord.
+    # With the numerals relative to the key, these sit best when the key's tonic is the
+    # dropped string (C in Drop C, D in Drop D): the open strings are then the tonic power chord.
+    Progression("Pedal chug (i5–i5–VII5–i5)", "minor", ("i5", "i5", "VII5", "i5"),
+                "Return to the open tonic power chord between every move. In C minor in Drop C the open "
+                "strings are C5 for free, and the VII5 is one finger on the 10th fret. Palm-mute the pedal.",
+                "minor_pent", blue=True, category=DROP, tuning="Drop C",
+                solo_tip="Minor pentatonic plus the blue note; land on the tonic over the open pedal."),
+    Progression("Gallop (i5–i5–VI5–VII5)", "minor", ("i5", "i5", "VI5", "VII5"),
+                "Two bars of open tonic, then climb through the VI and VII. Play the pedal as a "
+                "galloping eighth-note chug and let the chord changes land on the beat.",
+                "minor_pent", blue=True, category=DROP, tuning="Drop C"),
+    Progression("Chromatic climb (i5–♭II5–II5–♭III5)", "minor", ("i5", "bII5", "II5", "III5"),
+                "One-finger power chord slid up a fret at a time: open, 1st, 2nd, 3rd fret in the "
+                "tonic's drop tuning. Easy to play, very heavy.",
+                "minor_pent", blue=True, category=DROP, tuning="Drop C",
+                solo_tip="Chromatic roots are outside the pentatonic; lean on the blue note and bends."),
+    Progression("Power descent (i5–VII5–VI5–V5)", "minor", ("i5", "VII5", "VI5", "V5"),
+                "The Andalusian descent as power chords. In C minor that is open, 10th, 8th and 7th "
+                "frets: the whole riff is one shape moving down the dropped string.",
+                "minor_pent", blue=True, category=DROP, tuning="Drop C"),
+    Progression("Blues-rock turnaround (i7–iv7–i7–V7)", "minor", ("i7", "iv7", "i7", "V7"),
+                "Seventh chords with the dropped string supplying a low root underneath. Let the "
+                "voicings ring and leave space for fills.",
+                "minor_pent", blue=True, category=DROP, tuning="Drop C",
+                solo_tip="Minor pentatonic with the blue note; the V7 wants its major third as a target."),
+    Progression("Clean drop arpeggio (i–VI–III–VII)", "minor", ("i", "VI", "III", "VII"),
+                "A clean, ringing minor loop. Arpeggiate the chords and use the dropped string for a "
+                "low root under each one.",
+                "minor_pent", category=DROP, tuning="Drop C"),
+    Progression("Major pedal (I5–♭VII5–IV5–I5)", "major", ("I5", "bVII5", "IV5", "I5"),
+                "The tonic power chord on the open strings with the ♭VII and IV above it: a major-key "
+                "riff that still uses the dropped string as a pedal.",
+                "minor_pent", blue=True, category=DROP, tuning="Drop C",
+                solo_tip="Minor pentatonic with the blue note over major-key power chords is the "
+                         "classic rock sound."),
+    Progression("Drop D chug (I5–IV5–♭VII5–IV5)", "major", ("I5", "IV5", "bVII5", "IV5"),
+                "The classic Drop D riff move: open D5, then the IV and ♭VII as one-finger power "
+                "chords on the 5th and 10th frets.",
+                "minor_pent", blue=True, category=DROP, tuning="Drop D"),
 )
 
 

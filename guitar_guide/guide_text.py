@@ -50,6 +50,18 @@ GUIDE = [
     ("p", "The bottom of the circle is both 6 sharps (F♯ major) and 6 flats (G♭ major): one key "
           "with two spellings."),
 
+    ("h2", "Drop tunings"),
+    ("p", "In a drop tuning the lowest string is tuned a whole step down, so it sits a fifth below the next "
+          "string instead of a fourth. Drop D is D A D G B E. Drop C is C G C F A D: every string a whole step "
+          "below Drop D. Drop C♯ sits half a step above Drop C. The three lowest strings now spell root, fifth "
+          "and octave, so one finger barred across them is a power chord, and an open low string gives you the "
+          "tonic power chord for free. That is why drop tunings suit heavy riffs and pedal-point playing."),
+    ("p", "Choose a tuning in the bar at the top. Chord diagrams, voicings, the fretboard and playback all follow it. "
+          "The CAGED shapes and pentatonic boxes are the standard-tuning shapes sounding lower, with the dropped "
+          "string re-fretted two frets higher. Roots are named by pitch, so a power chord on the open strings of "
+          "Drop C is C5. Choose a progression from the Drop tunings group and the app offers to switch to the "
+          "tuning it was written for."),
+
     ("h2", "Using the app"),
     ("li", "•  Circle of Fifths: click a segment to change key. See the key signature, scale, "
            "pentatonic and the chords in the key as chord diagrams. Click a diagram to hear it."),

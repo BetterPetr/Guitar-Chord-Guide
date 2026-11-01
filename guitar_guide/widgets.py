@@ -60,6 +60,7 @@ class FretboardCanvas(tk.Canvas):
         super().__init__(master, bg=PANEL, highlightthickness=0, height=250, **kw)
         self.nfrets = nfrets
         self.on_click = on_click
+        self.tuning = guitar.STANDARD
         self.dots: list[Dot] = []
         self.outlines: list[Outline] = []
         self.bind("<Configure>", lambda e: self.redraw())
@@ -105,7 +106,7 @@ class FretboardCanvas(tk.Canvas):
         self.create_rectangle(left - 4, board_top, left, board_bot, fill="#efe6d2", outline="")
         for s in range(6):
             self.create_line(left, sy[s], fx[n], sy[s], fill=STRING, width=1 + (5 - s) * 0.5)
-            self.create_text(left * 0.1, sy[s], text=guitar.STRING_LABELS[s], fill=MUTED,
+            self.create_text(left * 0.1, sy[s], text=self.tuning.labels[s], fill=MUTED,
                              font=font(gap * 0.34))
         for i in range(1, n + 1):
             bold = i in (3, 5, 7, 9, 12, 15, 17)
@@ -160,8 +161,8 @@ class ChordDiagram(tk.Canvas):
         self.bind("<Button-1>", lambda e: self._command and self._command())
 
     def show(self, title: str, frets, root_pc: int, subtitle: str = "", command=None,
-             title_color: str = FG) -> None:
-        self._args = (title, tuple(frets), root_pc, subtitle, title_color)
+             title_color: str = FG, tuning: guitar.Tuning = guitar.STANDARD) -> None:
+        self._args = (title, tuple(frets), root_pc, subtitle, title_color, tuning)
         self._command = command
         self.config(cursor="hand2" if command else "")
         self.redraw()
@@ -174,7 +175,7 @@ class ChordDiagram(tk.Canvas):
         self.delete("all")
         if not self._args:
             return
-        title, frets, root_pc, subtitle, title_color = self._args
+        title, frets, root_pc, subtitle, title_color, tuning = self._args
         u = self.u
         self.config(bg=PANEL_HI if self._active else PANEL)
         self.create_text(self.W * u / 2, 15 * u, text=pretty(title), fill=ACCENT if self._active else title_color,
@@ -201,7 +202,7 @@ class ChordDiagram(tk.Canvas):
             if f is None:
                 self.create_text(sx[s], y0 - 9 * u, text="×", fill=MUTED, font=font(13 * u, "bold"))
             elif f == 0:
-                is_root = guitar.fret_pc(s, 0) == root_pc
+                is_root = guitar.fret_pc(s, 0, tuning) == root_pc
                 self.create_oval(sx[s] - 3.5 * u, y0 - 12.5 * u, sx[s] + 3.5 * u, y0 - 5.5 * u,
                                  outline=ACCENT if is_root else MUTED, width=2 if is_root else 1)
 
@@ -218,7 +219,7 @@ class ChordDiagram(tk.Canvas):
             if f == 0 or f - base >= rows:
                 continue
             x, y = cell(s, f)
-            is_root = guitar.fret_pc(s, f) == root_pc
+            is_root = guitar.fret_pc(s, f, tuning) == root_pc
             self.create_oval(x - r, y - r, x + r, y + r, fill=ACCENT if is_root else FG, outline="")
         if subtitle:
             self.create_text(self.W * u / 2, 150 * u, text=subtitle, fill=MUTED, font=font(11.5 * u))
