@@ -1,0 +1,369 @@
+"""Music theory core: note spelling, scales, chords, circle of fifths, progressions.
+
+Pure Python with no GUI imports so it can be unit tested headlessly.  Notes are
+plain strings such as "F#" or "Bb"; call pretty() to get the display form.
+"""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+LETTERS = "CDEFGAB"
+LETTER_PC = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+FLAT_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
+
+MAJOR_STEPS = (0, 2, 4, 5, 7, 9, 11)
+MINOR_STEPS = (0, 2, 3, 5, 7, 8, 10)
+
+# Circle of fifths, clockwise from the top (index i is i fifths above C).
+CIRCLE_MAJOR = ["C", "G", "D", "A", "E", "B", "F#", "Db", "Ab", "Eb", "Bb", "F"]
+CIRCLE_MINOR = ["A", "E", "B", "F#", "C#", "G#", "D#", "Bb", "F", "C", "G", "D"]
+SHARP_ORDER = ["F#", "C#", "G#", "D#", "A#", "E#", "B#"]
+FLAT_ORDER = ["Bb", "Eb", "Ab", "Db", "Gb", "Cb", "Fb"]
+
+
+def pretty(text: str) -> str:
+    """Swap ASCII accidentals for ♯/♭.  Only meant for note, chord and numeral names."""
+    return text.replace("#", "♯").replace("b", "♭")
+
+
+# --- notes ---------------------------------------------------------------
+
+_NOTE_RE = re.compile(r"([A-G])(#*|b*)$")
+
+
+def _accidentals(acc: str) -> int:
+    return len(acc) if acc.startswith("#") else -len(acc)
+
+
+def note_pc(name: str) -> int:
+    m = _NOTE_RE.match(name)
+    if not m:
+        raise ValueError(f"not a note name: {name!r}")
+    return (LETTER_PC[m.group(1)] + _accidentals(m.group(2))) % 12
+
+
+def shift_note(name: str, delta: int) -> str:
+    """Raise or lower a note name by `delta` semitones keeping its letter."""
+    letter, acc = _NOTE_RE.match(name).groups()
+    n = _accidentals(acc) + delta
+    return letter + ("#" * n if n > 0 else "b" * -n)
+
+
+def pc_name(pc: int, flats: bool = False) -> str:
+    return (FLAT_NAMES if flats else SHARP_NAMES)[pc % 12]
+
+
+def spell(root: str, steps, degrees) -> list[str]:
+    """Name the notes `steps` semitones above `root`, one letter per scale degree."""
+    letter0, pc0 = LETTERS.index(root[0]), note_pc(root)
+    out = []
+    for step, degree in zip(steps, degrees):
+        letter = LETTERS[(letter0 + degree - 1) % 7]
+        diff = (pc0 + step - LETTER_PC[letter]) % 12
+        if diff > 6:
+            diff -= 12
+        out.append(letter + ("#" * diff if diff > 0 else "b" * -diff))
+    return out
+
+
+def interval_label(step: int, degree: int) -> str:
+    """'b3', '5', '#5', '9' ... for a note `step` semitones up on scale degree `degree`."""
+    major = MAJOR_STEPS[(degree - 1) % 7] + 12 * ((degree - 1) // 7)
+    diff = step - major
+    return ("#" * diff if diff > 0 else "b" * -diff) + str(degree)
+
+
+# --- scales --------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ScaleType:
+    key: str
+    name: str
+    steps: tuple
+    degrees: tuple
+
+
+SCALES = {s.key: s for s in (
+    ScaleType("major", "Major", MAJOR_STEPS, (1, 2, 3, 4, 5, 6, 7)),
+    ScaleType("minor", "Natural minor", MINOR_STEPS, (1, 2, 3, 4, 5, 6, 7)),
+    ScaleType("major_pent", "Major pentatonic", (0, 2, 4, 7, 9), (1, 2, 3, 5, 6)),
+    ScaleType("minor_pent", "Minor pentatonic", (0, 3, 5, 7, 10), (1, 3, 4, 5, 7)),
+)}
+
+# The extra "blue note" each pentatonic picks up in blues playing: (step, degree).
+BLUE_NOTES = {"major_pent": (3, 3), "minor_pent": (6, 5)}
+
+
+@dataclass(frozen=True)
+class ScaleNote:
+    name: str
+    pc: int
+    label: str  # interval from the tonic: "1", "b3", ...
+    step: int
+
+
+def scale_degrees(tonic: str, scale_key: str, blue: bool = False) -> list[ScaleNote]:
+    sc = SCALES[scale_key]
+    pairs = list(zip(sc.steps, sc.degrees))
+    if blue and scale_key in BLUE_NOTES:
+        pairs = sorted(pairs + [BLUE_NOTES[scale_key]])
+    names = spell(tonic, [p[0] for p in pairs], [p[1] for p in pairs])
+    return [ScaleNote(n, note_pc(n), interval_label(s, d), s) for n, (s, d) in zip(names, pairs)]
+
+
+def scale_notes(tonic: str, scale_key: str, blue: bool = False) -> list[str]:
+    return [n.name for n in scale_degrees(tonic, scale_key, blue)]
+
+
+# --- chords --------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ChordType:
+    key: str
+    suffix: str
+    name: str
+    steps: tuple
+    degrees: tuple
+
+    @property
+    def labels(self) -> tuple:
+        return tuple(interval_label(s, d) for s, d in zip(self.steps, self.degrees))
+
+
+CHORD_TYPES = {c.key: c for c in (
+    ChordType("maj", "", "Major", (0, 4, 7), (1, 3, 5)),
+    ChordType("min", "m", "Minor", (0, 3, 7), (1, 3, 5)),
+    ChordType("7", "7", "Dominant 7th", (0, 4, 7, 10), (1, 3, 5, 7)),
+    ChordType("maj7", "maj7", "Major 7th", (0, 4, 7, 11), (1, 3, 5, 7)),
+    ChordType("m7", "m7", "Minor 7th", (0, 3, 7, 10), (1, 3, 5, 7)),
+    ChordType("sus2", "sus2", "Suspended 2nd", (0, 2, 7), (1, 2, 5)),
+    ChordType("sus4", "sus4", "Suspended 4th", (0, 5, 7), (1, 4, 5)),
+    ChordType("dim", "dim", "Diminished", (0, 3, 6), (1, 3, 5)),
+    ChordType("aug", "aug", "Augmented", (0, 4, 8), (1, 3, 5)),
+    ChordType("6", "6", "Major 6th", (0, 4, 7, 9), (1, 3, 5, 6)),
+    ChordType("add9", "add9", "Add 9", (0, 4, 7, 14), (1, 3, 5, 9)),
+    ChordType("9", "9", "Dominant 9th", (0, 4, 7, 10, 14), (1, 3, 5, 7, 9)),
+    ChordType("m7b5", "m7b5", "Half-diminished", (0, 3, 6, 10), (1, 3, 5, 7)),
+    ChordType("5", "5", "Power chord", (0, 7), (1, 5)),
+)}
+
+
+@dataclass(frozen=True)
+class Chord:
+    root: str
+    ctype: str
+    roman: str = ""
+
+    @property
+    def name(self) -> str:
+        return self.root + CHORD_TYPES[self.ctype].suffix
+
+    @property
+    def pc(self) -> int:
+        return note_pc(self.root)
+
+    @property
+    def notes(self) -> list[str]:
+        ct = CHORD_TYPES[self.ctype]
+        return spell(self.root, ct.steps, ct.degrees)
+
+    @property
+    def pcs(self) -> frozenset:
+        return frozenset((self.pc + s) % 12 for s in CHORD_TYPES[self.ctype].steps)
+
+
+# --- circle of fifths ----------------------------------------------------
+
+def circle_pc(index: int) -> int:
+    """Pitch class of the major key `index` fifths above C."""
+    return (index * 7) % 12
+
+
+def circle_index(pc: int, mode: str) -> int:
+    """Position on the circle of a key; a minor key shares its relative major's slot."""
+    major_pc = pc if mode == "major" else (pc + 3) % 12
+    return (major_pc * 7) % 12  # 7 is its own inverse mod 12
+
+
+def key_pc(index: int, mode: str) -> int:
+    return circle_pc(index) if mode == "major" else (circle_pc(index) + 9) % 12
+
+
+def key_name(pc: int, mode: str) -> str:
+    return (CIRCLE_MAJOR if mode == "major" else CIRCLE_MINOR)[circle_index(pc, mode)]
+
+
+def key_signature(index: int) -> tuple[int, str]:
+    """(count, 'sharp' | 'flat' | '') for the circle position."""
+    if index == 0:
+        return 0, ""
+    return (index, "sharp") if index <= 6 else (12 - index, "flat")
+
+
+def signature_accidentals(index: int) -> list[str]:
+    count, kind = key_signature(index)
+    return (SHARP_ORDER if kind == "sharp" else FLAT_ORDER)[:count]
+
+
+def relative_key(pc: int, mode: str) -> tuple[int, str]:
+    return ((pc + 9) % 12, "minor") if mode == "major" else ((pc + 3) % 12, "major")
+
+
+# Chords of the "key family" around a circle position: (ring, offset) -> numeral.
+FAMILY_MAJOR = {("major", 0): "I", ("major", -1): "IV", ("major", 1): "V",
+                ("minor", 0): "vi", ("minor", -1): "ii", ("minor", 1): "iii"}
+FAMILY_MINOR = {("minor", 0): "i", ("minor", -1): "iv", ("minor", 1): "v",
+                ("major", 0): "III", ("major", -1): "VI", ("major", 1): "VII"}
+
+
+# --- diatonic harmony ----------------------------------------------------
+
+ROMAN_MAJOR = ["I", "ii", "iii", "IV", "V", "vi", "vii°"]
+ROMAN_MINOR = ["i", "ii°", "III", "iv", "v", "VI", "VII"]
+_TRIADS = {"major": ["maj", "min", "min", "maj", "maj", "min", "dim"],
+           "minor": ["min", "dim", "maj", "min", "min", "maj", "maj"]}
+_SEVENTHS = {"major": ["maj7", "m7", "m7", "maj7", "7", "m7", "m7b5"],
+             "minor": ["m7", "m7b5", "maj7", "m7", "m7", "maj7", "7"]}
+_SEVENTH_ROMAN = {"maj7": "maj7", "7": "7", "m7": "7", "m7b5": "ø7"}
+
+
+def diatonic_chords(tonic: str, mode: str, sevenths: bool = False) -> list[Chord]:
+    sc = SCALES["major" if mode == "major" else "minor"]
+    roots = spell(tonic, sc.steps, sc.degrees)
+    romans = ROMAN_MAJOR if mode == "major" else ROMAN_MINOR
+    types = (_SEVENTHS if sevenths else _TRIADS)[mode]
+    out = []
+    for root, roman, ctype in zip(roots, romans, types):
+        if sevenths:
+            roman = roman.rstrip("°") + _SEVENTH_ROMAN[ctype]
+        out.append(Chord(root, ctype, roman))
+    return out
+
+
+def keys_containing(root_pc: int, ctype: str) -> list[tuple[str, str]]:
+    """(numeral, 'G major') for every circle key in which this chord is diatonic."""
+    sevenths = ctype in ("7", "maj7", "m7", "m7b5")
+    found = []
+    for mode, names in (("major", CIRCLE_MAJOR), ("minor", CIRCLE_MINOR)):
+        for tonic in names:
+            for c in diatonic_chords(tonic, mode, sevenths):
+                if c.pc == root_pc and c.ctype == ctype:
+                    found.append((c.roman, f"{tonic} {mode}"))
+    return found
+
+
+# --- progressions --------------------------------------------------------
+
+_ROMAN_RE = re.compile(r"^([b#]?)(VII|VI|IV|V|III|II|I|vii|vi|iv|v|iii|ii|i)(.*)$")
+_DEGREE = {"i": 0, "ii": 1, "iii": 2, "iv": 3, "v": 4, "vi": 5, "vii": 6}
+_UPPER_SUFFIX = {"": "maj", "7": "7", "maj7": "maj7", "sus2": "sus2", "sus4": "sus4",
+                 "6": "6", "add9": "add9", "9": "9", "5": "5"}
+_LOWER_SUFFIX = {"": "min", "7": "m7", "°": "dim", "dim": "dim", "ø": "m7b5",
+                 "ø7": "m7b5", "m7b5": "m7b5", "5": "5"}
+
+
+def parse_numeral(token: str) -> tuple[int, int, str]:
+    """'bVII' -> (-1, 6, 'maj'); 'ii7' -> (0, 1, 'm7').  Raises ValueError if unreadable."""
+    m = _ROMAN_RE.match(token.strip())
+    if not m:
+        raise ValueError(f"can't read '{token}' as a Roman numeral chord")
+    accidental, numeral, suffix = m.groups()
+    table = _UPPER_SUFFIX if numeral.isupper() else _LOWER_SUFFIX
+    if suffix not in table:
+        raise ValueError(f"can't read '{token}': unrecognised ending '{suffix}' "
+                         "(try 7, maj7, ° or nothing)")
+    delta = {"b": -1, "#": 1, "": 0}[accidental]
+    return delta, _DEGREE[numeral.lower()], table[suffix]
+
+
+def resolve_progression(numerals, tonic: str, mode: str) -> list[Chord]:
+    sc = SCALES["major" if mode == "major" else "minor"]
+    roots = spell(tonic, sc.steps, sc.degrees)
+    chords = []
+    for token in numerals:
+        delta, degree, ctype = parse_numeral(token)
+        chords.append(Chord(shift_note(roots[degree], delta), ctype, token))
+    return chords
+
+
+@dataclass(frozen=True)
+class Progression:
+    name: str
+    mode: str
+    numerals: tuple
+    description: str
+    solo: str       # pentatonic that sits over it: "major_pent" | "minor_pent"
+    blue: bool = False
+    solo_tip: str = ""
+
+
+PROGRESSIONS = (
+    Progression("Pop four (I–V–vi–IV)", "major", ("I", "V", "vi", "IV"),
+                "The most-used progression in modern pop and rock. Works in every key; "
+                "the vi gives it a wistful turn before IV resets it.",
+                "major_pent", solo_tip="Major pentatonic of the key is the safe choice."),
+    Progression("Fifties (I–vi–IV–V)", "major", ("I", "vi", "IV", "V"),
+                "Doo-wop and early rock 'n' roll. The V pulls hard back to I.",
+                "major_pent"),
+    Progression("Three chord (I–IV–V)", "major", ("I", "IV", "V", "I"),
+                "The foundation of rock, country and folk: the three major chords "
+                "that sit next to each other on the circle of fifths.",
+                "major_pent"),
+    Progression("Country (I–IV–I–V)", "major", ("I", "IV", "I", "V"),
+                "Same three chords, slower harmonic rhythm. Strum it with a boom-chick feel.",
+                "major_pent"),
+    Progression("Sensitive (vi–IV–I–V)", "major", ("vi", "IV", "I", "V"),
+                "The pop four chords starting on the relative minor, so it feels minor "
+                "while staying in the major key.",
+                "major_pent", solo_tip="The key's major pentatonic is the same five notes as the "
+                "relative minor pentatonic (starting on the vi), so either label works."),
+    Progression("Canon (I–V–vi–iii–IV–I–IV–V)", "major",
+                ("I", "V", "vi", "iii", "IV", "I", "IV", "V"),
+                "Pachelbel's descending-bass sequence: a walk once round the circle of "
+                "fifths neighbourhood.",
+                "major_pent"),
+    Progression("Mixolydian rock (I–♭VII–IV–I)", "major",
+                ("I", "bVII", "IV", "I"),
+                "Borrows the flat seventh chord for that classic-rock swagger.",
+                "major_pent", blue=True,
+                solo_tip="Major pentatonic with the blue note, or minor pentatonic for grit."),
+    Progression("Jazz ii–V–I", "major", ("ii7", "V7", "Imaj7", "Imaj7"),
+                "The cadence of jazz harmony: each chord is a fifth below the last, "
+                "straight round the circle of fifths.",
+                "major_pent", solo_tip="Major pentatonic works over the I; chase chord tones on ii and V."),
+    Progression("12-bar blues", "major",
+                ("I7", "I7", "I7", "I7", "IV7", "IV7", "I7", "I7", "V7", "IV7", "I7", "V7"),
+                "Every chord is a dominant 7th. Twelve bars, three chords, endless variations.",
+                "minor_pent", blue=True,
+                solo_tip="Minor pentatonic of the tonic plus the blue note is the blues sound."),
+    Progression("Minor rock (i–VII–VI–VII)", "minor",
+                ("i", "VII", "VI", "VII"),
+                "Driving natural-minor vamp: the three chords just below the tonic.",
+                "minor_pent"),
+    Progression("Andalusian (i–VII–VI–V)", "minor",
+                ("i", "VII", "VI", "V"),
+                "Flamenco-flavoured descent. The final V is major, pulling back to i.",
+                "minor_pent", blue=True),
+    Progression("Epic minor (i–VI–III–VII)", "minor",
+                ("i", "VI", "III", "VII"),
+                "Big, cinematic minor progression; three major chords around the minor home.",
+                "minor_pent"),
+    Progression("Minor pop (i–iv–VII–III)", "minor",
+                ("i", "iv", "VII", "III"),
+                "Moody but warm. The iv is the minor key's subdominant.",
+                "minor_pent"),
+    Progression("Minor ii°–V–i", "minor", ("ii°", "V7", "i", "i"),
+                "The minor-key jazz cadence. V7 borrows the raised 7th from harmonic minor.",
+                "minor_pent", blue=True),
+    Progression("Minor blues", "minor",
+                ("i7", "i7", "i7", "i7", "iv7", "iv7", "i7", "i7", "VI", "V7", "i7", "V7"),
+                "The 12-bar form in a minor key.",
+                "minor_pent", blue=True,
+                solo_tip="Minor pentatonic plus the blue note. Here the pentatonic fits everywhere."),
+)
+
+
+def progressions_for(mode: str) -> list[Progression]:
+    return [p for p in PROGRESSIONS if p.mode == mode]
